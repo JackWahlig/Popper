@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument('--max-literals', type=int, default=MAX_LITERALS, help='Maximum number of literals allowed in program')
     # parser.add_argument('--max-solutions', type=int, default=MAX_SOLUTIONS, help='Maximum number of solutions to print')
     parser.add_argument('--test-all', default=False, action='store_true', help='Test all examples')
+    parser.add_argument('--noisy', default=False, action='store_true', help='Enables noise handling')
     parser.add_argument('--info', default=False, action='store_true', help='Print best programs so far to stderr')
     parser.add_argument('--debug', default=False, action='store_true', help='Print debugging information to stderr')
     parser.add_argument('--stats', default=False, action='store_true', help='Print statistics at end of execution')
@@ -73,6 +74,7 @@ def parse_settings():
         stats = args.stats,
         eval_timeout = args.eval_timeout,
         test_all = args.test_all,
+        noisy = args.noisy,
         timeout = args.timeout,
         max_literals = args.max_literals,
         clingo_args= [] if not args.clingo_args else args.clingo_args.split(' '),
@@ -91,6 +93,7 @@ class Settings:
             stats = False,
             eval_timeout = EVAL_TIMEOUT,
             test_all = False,
+            noisy = False,
             timeout = TIMEOUT,
             max_literals = MAX_LITERALS,
             clingo_args = CLINGO_ARGS,
@@ -106,6 +109,7 @@ class Settings:
         self.stats = stats
         self.eval_timeout = eval_timeout
         self.test_all = test_all
+        self.noisy = noisy
         self.timeout = timeout
         self.max_literals = max_literals
         self.clingo_args = clingo_args
@@ -136,6 +140,7 @@ class Stats:
                     durations = None,
                     final_exec_time = 0,
                     stages = None,
+                    all_programs = None,
                     best_programs = None,
                     solution = None):
         self.exec_start = perf_counter()
@@ -149,6 +154,7 @@ class Stats:
         self.durations = {} if not durations else durations
         self.final_exec_time = final_exec_time
         self.stages = [] if not stages else stages
+        self.all_programs = [] if not all_programs else all_programs
         self.best_programs = [] if not best_programs else best_programs
         self.solution = solution
 
@@ -172,7 +178,9 @@ class Stats:
     
     def register_program(self, program, conf_matrix):
         self.total_programs +=1
-        
+        prog_stats = self.make_program_stats(program, conf_matrix)
+        self.all_programs.append(prog_stats)
+
         self.logger.debug(f'Program {self.total_programs}:')
         self.logger.debug(format_program(program))
         self.logger.debug(format_conf_matrix(conf_matrix))

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import logging
+from operator import neg
 import sys
 from . util import Settings, Stats, timeout, parse_settings, format_program
 from . asp import ClingoGrounder, ClingoSolver
@@ -55,23 +56,37 @@ def decide_outcome(conf_matrix):
         positive_outcome = Outcome.NONE # totally incomplete
     else:
         positive_outcome = Outcome.SOME # incomplete
-
     if fp == 0:
         negative_outcome = Outcome.NONE  # consistent
-    # elif FP == self.num_neg:     # AC: this line may not work with minimal testing
-        # negative_outcome = Outcome.ALL # totally inconsistent
+    elif tn == 0 and fp > 0:
+        negative_outcome = Outcome.ALL # totally inconsistent
     else:
         negative_outcome = Outcome.SOME # inconsistent
 
     return (positive_outcome, negative_outcome)
 
-def build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome):
+def build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome, score):
     (positive_outcome, negative_outcome) = outcome
+    rules = set()
+
+    # JW: Noisy setting - Sound Constraints, Size Constraints, and Minimal Constraints
+    if settings.noisy:
+        # JW: Sound Constraints
+
+        # JW: Minimal Constraints - Only prune generalizations when entailing all negative examples. Only prune specializations when entailing no positive examples
+        # JW: Still prune generalisations when entailing all positive examples. Still prune specializations when entailing no negative examples
+        if positive_outcome == Outcome.SOME and negative_outcome == Outcome.ALL:
+            positive_outcome = Outcome.ALL
+        elif positive_outcome == Outcome.NONE and negative_outcome == Outcome.SOME:
+            negative_outcome = Outcome.NONE
+        elif positive_outcome == Outcome.SOME and negative_outcome == Outcome.SOME:
+            positive_outcome = Outcome.ALL
+            negative_outcome = Outcome.NONE
+
     # RM: If you don't use these two lines you need another three entries in the OUTCOME_TO_CONSTRAINTS table (one for every positive outcome combined with negative outcome ALL).
     if negative_outcome == Outcome.ALL:
-         negative_outcome = Outcome.SOME
-
-    rules = set()
+        negative_outcome = Outcome.SOME
+            
     for constraint_type in OUTCOME_TO_CONSTRAINTS[(positive_outcome, negative_outcome)]:
         if constraint_type == Con.GENERALISATION:
             rules.update(constrainer.generalisation_constraint(program, before, min_clause))
@@ -157,7 +172,7 @@ def popper(settings, stats):
 
             # BUILD RULES
             with stats.duration('build'):
-                rules = build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome)
+                rules = build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome, score)
 
             # GROUND RULES
             with stats.duration('ground'):
