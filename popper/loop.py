@@ -2,13 +2,14 @@
 
 import logging
 from operator import neg
+from os import stat
 import sys
 from . util import Settings, Stats, timeout, parse_settings, format_program
 from . asp import ClingoGrounder, ClingoSolver
 from . tester import Tester
 from . constrain import Constrain
 from . generate import generate_program
-from . core import Grounding, Clause
+from . core import Grounding, Clause, is_subset, is_generalization_of, is_specialization_of
 
 class Outcome:
     ALL = 'all'
@@ -65,13 +66,62 @@ def decide_outcome(conf_matrix):
 
     return (positive_outcome, negative_outcome)
 
-def build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome, score):
+def build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome):
     (positive_outcome, negative_outcome) = outcome
     rules = set()
 
+    gens_pruned_flag = False # JW: Avoid redundant constraints
+    specs_pruned_flag = False 
     # JW: Noisy setting - Sound Constraints, Size Constraints, and Minimal Constraints
     if settings.noisy:
         # JW: Sound Constraints
+        (new_tp, new_fn, new_tn, new_fp) = stats.all_programs[-1].conf_matrix
+        new_score = calc_score((new_tp, new_fn, new_tn, new_fp))
+        num_pos = new_tp + new_fn
+        num_neg = new_tn + new_fp
+
+        for old_program in stats.all_programs[:-1]:
+            (old_tp, old_fn, old_tn, old_fp) = old_program.conf_matrix
+
+            if new_tp == old_tp and is_generalization_of(program, old_program.program) and len(program) > len(old_program.program):
+                if is_subset(old_program.program, program):
+                    # JW: Prune GENS and SPECS of NEW program
+                    rules.update(constrainer.generalisation_constraint(program, before, min_clause))
+                    gens_pruned_flag = True
+                    rules.update(constrainer.specialisation_constraint(program, before, min_clause))
+                    specs_pruned_flag = True
+                    break
+                else:
+                    # JW: Prune GENS of NEW program
+                    rules.update(constrainer.generalisation_constraint(program, before, min_clause))
+                    gens_pruned_flag = True
+
+            if not gens_pruned_flag and new_tn == old_tn and is_specialization_of(program, old_program.program):
+                # JW: Prune GENS of NEW Program
+                rules.update(constrainer.generalisation_constraint(program, before, min_clause))
+                gens_pruned_flag = True
+
+        i = 0
+        while i < len(stats.can_prune_gens):
+            old_program = stats.can_prune_gens[i]
+            old_score = calc_score(old_program.conf_matrix)
+            if new_score - old_score > num_pos - old_tp:
+                # JW: Prune GENS of OLD program
+                rules.update(constrainer.generalisation_constraint(old_program.program, before, min_clause))
+                del stats.can_prune_gens[i]
+                i -= 1
+            i += 1
+
+        i = 0
+        while i < len(stats.can_prune_specs):
+            old_program = stats.can_prune_specs[i]
+            old_score = calc_score(old_program.conf_matrix)
+            if new_score - old_score > num_neg - old_tn:
+                # JW: Prune SPECS of OLD 
+                rules.update(constrainer.specialisation_constraint(old_program.program, before, min_clause))
+                del stats.can_prune_specs[i]
+                i -= 1
+            i += 1
 
         # JW: Minimal Constraints - Only prune generalizations when entailing all negative examples. Only prune specializations when entailing no positive examples
         # JW: Still prune generalisations when entailing all positive examples. Still prune specializations when entailing no negative examples
@@ -88,14 +138,22 @@ def build_rules(settings, stats, constrainer, tester, program, before, min_claus
         negative_outcome = Outcome.SOME
             
     for constraint_type in OUTCOME_TO_CONSTRAINTS[(positive_outcome, negative_outcome)]:
-        if constraint_type == Con.GENERALISATION:
+        if constraint_type == Con.GENERALISATION and not gens_pruned_flag:
             rules.update(constrainer.generalisation_constraint(program, before, min_clause))
-        elif constraint_type == Con.SPECIALISATION:
+            gens_pruned_flag = True
+        elif constraint_type == Con.SPECIALISATION and not specs_pruned_flag:
             rules.update(constrainer.specialisation_constraint(program, before, min_clause))
+            specs_pruned_flag = True
         elif constraint_type == Con.REDUNDANCY:
             rules.update(constrainer.redundancy_constraint(program, before, min_clause))
         elif constraint_type == Con.BANISH:
             rules.update(constrainer.banish_constraint(program, before, min_clause))
+
+    if settings.noisy:
+        if gens_pruned_flag:
+            stats.can_prune_gens.append(stats.all_programs[-1])
+        if specs_pruned_flag:
+            stats.can_prune_specs.append(stats.all_programs[-1])
 
     if settings.functional_test and tester.is_non_functional(program):
         rules.update(constrainer.generalisation_constraint(program, before, min_clause))
@@ -144,7 +202,7 @@ def popper(settings, stats):
         stats.update_num_literals(size)
         solver.update_number_of_literals(size)
 
-        while True:
+        while not len(stats.all_programs) == settings.max_programs:
             # GENERATE HYPOTHESIS
             with stats.duration('generate'):
                 model = solver.get_model()
@@ -172,7 +230,7 @@ def popper(settings, stats):
 
             # BUILD RULES
             with stats.duration('build'):
-                rules = build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome, score)
+                rules = build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome)
 
             # GROUND RULES
             with stats.duration('ground'):

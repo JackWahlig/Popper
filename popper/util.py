@@ -10,6 +10,7 @@ from .constrain import Constrain
 
 TIMEOUT=600
 EVAL_TIMEOUT=0.001
+MAX_PROGRAMS=-1
 MAX_LITERALS=100
 MAX_SOLUTIONS=1
 CLINGO_ARGS=''
@@ -19,6 +20,7 @@ def parse_args():
     parser.add_argument('kbpath', help = 'Path to the knowledge base one wants to learn on')
     parser.add_argument('--eval-timeout', type=float, default=EVAL_TIMEOUT, help='Prolog evaluation timeout in seconds')
     parser.add_argument('--timeout', type=float, default=TIMEOUT, help='Overall timeout (in seconds)')
+    parser.add_argument('--max-programs', type=int, default=MAX_PROGRAMS, help='Maximum number of programs Popper is allowed to generate' )
     parser.add_argument('--max-literals', type=int, default=MAX_LITERALS, help='Maximum number of literals allowed in program')
     # parser.add_argument('--max-solutions', type=int, default=MAX_SOLUTIONS, help='Maximum number of solutions to print')
     parser.add_argument('--test-all', default=False, action='store_true', help='Test all examples')
@@ -76,6 +78,7 @@ def parse_settings():
         test_all = args.test_all,
         noisy = args.noisy,
         timeout = args.timeout,
+        max_programs = args.max_programs,
         max_literals = args.max_literals,
         clingo_args= [] if not args.clingo_args else args.clingo_args.split(' '),
         max_solutions = MAX_SOLUTIONS,
@@ -95,6 +98,7 @@ class Settings:
             test_all = False,
             noisy = False,
             timeout = TIMEOUT,
+            max_programs = MAX_PROGRAMS,
             max_literals = MAX_LITERALS,
             clingo_args = CLINGO_ARGS,
             max_solutions = MAX_SOLUTIONS,
@@ -111,6 +115,7 @@ class Settings:
         self.test_all = test_all
         self.noisy = noisy
         self.timeout = timeout
+        self.max_programs = max_programs
         self.max_literals = max_literals
         self.clingo_args = clingo_args
         self.max_solutions = max_solutions
@@ -156,6 +161,8 @@ class Stats:
         self.stages = [] if not stages else stages
         self.all_programs = [] if not all_programs else all_programs
         self.best_programs = [] if not best_programs else best_programs
+        self.can_prune_gens = [] # JW: For Noisy Popper optimization
+        self.can_prune_specs = []
         self.solution = solution
 
     def __enter__(self):
@@ -205,10 +212,11 @@ class Stats:
         self.logger.info(f'\n% BEST PROG {self.total_programs}:')
         self.logger.info(prog_stats.code)
         self.logger.info(format_conf_matrix(prog_stats.conf_matrix))
+        self.logger.info(f'\n% NUMBER OF PROGRAMS TESTED: {len(self.all_programs)}')
 
     def make_program_stats(self, program, conf_matrix):
         code = format_program(program)
-        return ProgramStats(code, conf_matrix, self.total_exec_time(), self.duration_summary())
+        return ProgramStats(code, program, conf_matrix, self.total_exec_time(), self.duration_summary())
 
     def register_solution(self, program, conf_matrix):
         prog_stats = self.make_program_stats(program, conf_matrix)
@@ -286,8 +294,9 @@ class Stage:
         self.exec_time = exec_time
 
 class ProgramStats:
-    def __init__(self, code, conf_matrix, total_exec_time, durations):
+    def __init__(self, code, program, conf_matrix, total_exec_time, durations):
         self.code = code
+        self.program = program
         self.conf_matrix = conf_matrix
         self.total_exec_time = total_exec_time
         self.durations = durations
