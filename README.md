@@ -255,7 +255,11 @@ To run in information mode use the flag `--info` (`settings.info = True`).
 
 To show the full hypothesis space (bounded by `N`) use the flag `--hspace N`.
 
+To run with Noisy Popper use the flag `--noisy` (`settings.noisy = True`).
+
 To run with a maximum learning time use the flag `--timeout` (`settings.timeout = N`).
+
+To run with a maximum number of programs generated use the flag `--max-programs`) (`settings.max_programs = N`)
 
 To run with a maximum example testing time use the flag `--eval-timeout` (`settings.eval_timeout = True`).
 

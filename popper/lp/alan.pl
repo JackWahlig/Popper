@@ -735,3 +735,9 @@ only_once(P,A):-
 %%     not multiclause(P,A),
 %%     only_once(P,A).
 
+program_size(N):-
+    #sum{K+1,Clause : body_size(Clause,K)} == N.
+
+#const max_bound=100.
+program_bounds(0 .. max_bound).
+program_size_at_least(M):- program_size(N),program_bounds(M),M <= N.

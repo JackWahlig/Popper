@@ -113,6 +113,55 @@ class Constrain:
 
         yield (None, tuple(literals))
 
+    def generalisation_constraint_non_rec(self, program, before, min_clause):
+        literals = []
+        for clause_number, clause in enumerate(program):
+            (_head, body) = clause
+            clause_handle = self.make_clause_handle(clause)
+            yield from self.make_clause_inclusion_rule(clause,  min_clause[clause], clause_handle)
+
+            literals.append(Literal('included_clause', (clause_handle, vo_clause(clause_number))))
+            literals.append(body_size_literal(vo_clause(clause_number), len(body)))
+
+        for clause_number1, clause_numbers in before.items():
+            for clause_number2 in clause_numbers:
+                literals.append(lt(vo_clause(clause_number1), vo_clause(clause_number2)))
+
+        for clause_number, clause in enumerate(program):
+            literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
+
+        # ensure that each clause_var is ground to a unique value
+        literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
+        # ensure no recursive programs are pruned
+        literals.append(Literal('recursive', (), positive = False))
+
+        yield (None, tuple(literals))
+
+    def generalisation_constraint_size(self, program, before, min_clause, size):
+        literals = []
+        for clause_number, clause in enumerate(program):
+            (_head, body) = clause
+            clause_handle = self.make_clause_handle(clause)
+            yield from self.make_clause_inclusion_rule(clause,  min_clause[clause], clause_handle)
+
+            literals.append(Literal('included_clause', (clause_handle, vo_clause(clause_number))))
+            literals.append(body_size_literal(vo_clause(clause_number), len(body)))
+
+        for clause_number1, clause_numbers in before.items():
+            for clause_number2 in clause_numbers:
+                literals.append(lt(vo_clause(clause_number1), vo_clause(clause_number2)))
+
+        for clause_number, clause in enumerate(program):
+            literals.append(gteq(vo_clause(clause_number), min_clause[clause]))
+
+        # ensure that each clause_var is ground to a unique value
+        literals.append(alldiff(tuple(vo_clause(c) for c in range(len(program)))))
+        # only prune generalizations of given size or greater
+        literals.append(Literal('program_size_at_least', 'N', positive = True))
+        literals.append(eq(vo_variable('N'), size))
+
+        yield (None, tuple(literals))
+
     def specialisation_constraint(self, program, before, min_clause):
         literals = []
 
@@ -130,6 +179,52 @@ class Constrain:
         # ensure that each clause_var is ground to a unique value
         literals.append(alldiff(tuple(vo_clause(c) for c in range(num_clauses))))
         literals.append(Literal('clause', (num_clauses, ), positive = False))
+
+        yield (None, tuple(literals))
+
+    def specialisation_constraint_non_rec(self, program, before, min_clause):
+        literals = []
+
+        for clause_number, clause in enumerate(program):
+            clause_handle = self.make_clause_handle(clause)
+            yield from self.make_clause_inclusion_rule(clause, min_clause[clause], clause_handle)
+            clause_variable = vo_clause(clause_number)
+            literals.append(Literal('included_clause', (clause_handle, clause_variable)))
+
+        for clause_number1, clause_numbers in before.items():
+            for clause_number2 in clause_numbers:
+                literals.append(lt(vo_clause(clause_number1), vo_clause(clause_number2)))
+
+        num_clauses = len(program)
+        # ensure that each clause_var is ground to a unique value
+        literals.append(alldiff(tuple(vo_clause(c) for c in range(num_clauses))))
+        literals.append(Literal('clause', (num_clauses, ), positive = False))
+        # ensure no recursive programs are pruned
+        literals.append(Literal('recursive', (), positive = False))
+        
+
+        yield (None, tuple(literals))
+
+    def specialisation_constraint_size(self, program, before, min_clause, size):
+        literals = []
+
+        for clause_number, clause in enumerate(program):
+            clause_handle = self.make_clause_handle(clause)
+            yield from self.make_clause_inclusion_rule(clause, min_clause[clause], clause_handle)
+            clause_variable = vo_clause(clause_number)
+            literals.append(Literal('included_clause', (clause_handle, clause_variable)))
+
+        for clause_number1, clause_numbers in before.items():
+            for clause_number2 in clause_numbers:
+                literals.append(lt(vo_clause(clause_number1), vo_clause(clause_number2)))
+
+        num_clauses = len(program)
+        # ensure that each clause_var is ground to a unique value
+        literals.append(alldiff(tuple(vo_clause(c) for c in range(num_clauses))))
+        literals.append(Literal('clause', (num_clauses, ), positive = False))
+        # only prune specialization of given size or greater
+        literals.append(Literal('program_size_at_least', 'N', positive = True))
+        literals.append(eq(vo_variable('N'), size))
 
         yield (None, tuple(literals))
 

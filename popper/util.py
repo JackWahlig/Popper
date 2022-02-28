@@ -212,7 +212,6 @@ class Stats:
         self.logger.info(f'\n% BEST PROG {self.total_programs}:')
         self.logger.info(prog_stats.code)
         self.logger.info(format_conf_matrix(prog_stats.conf_matrix))
-        self.logger.info(f'\n% NUMBER OF PROGRAMS TESTED: {len(self.all_programs)}')
 
     def make_program_stats(self, program, conf_matrix):
         code = format_program(program)

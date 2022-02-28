@@ -66,7 +66,7 @@ def decide_outcome(conf_matrix):
 
     return (positive_outcome, negative_outcome)
 
-def build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome):
+def build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome, size):
     (positive_outcome, negative_outcome) = outcome
     rules = set()
 
@@ -86,19 +86,19 @@ def build_rules(settings, stats, constrainer, tester, program, before, min_claus
             if new_tp == old_tp and is_generalization_of(program, old_program.program) and len(program) > len(old_program.program):
                 if is_subset(old_program.program, program):
                     # JW: Prune GENS and SPECS of NEW program
-                    rules.update(constrainer.generalisation_constraint(program, before, min_clause))
+                    rules.update(constrainer.generalisation_constraint_non_rec(program, before, min_clause))
                     gens_pruned_flag = True
-                    rules.update(constrainer.specialisation_constraint(program, before, min_clause))
+                    rules.update(constrainer.specialisation_constraint_non_rec(program, before, min_clause))
                     specs_pruned_flag = True
                     break
                 else:
                     # JW: Prune GENS of NEW program
-                    rules.update(constrainer.generalisation_constraint(program, before, min_clause))
+                    rules.update(constrainer.generalisation_constraint_non_rec(program, before, min_clause))
                     gens_pruned_flag = True
 
             if not gens_pruned_flag and new_tn == old_tn and is_specialization_of(program, old_program.program):
                 # JW: Prune GENS of NEW Program
-                rules.update(constrainer.generalisation_constraint(program, before, min_clause))
+                rules.update(constrainer.generalisation_constraint_non_rec(program, before, min_clause))
                 gens_pruned_flag = True
 
         i = 0
@@ -122,6 +122,25 @@ def build_rules(settings, stats, constrainer, tester, program, before, min_claus
                 del stats.can_prune_specs[i]
                 i -= 1
             i += 1
+
+        # JW: Size Constraints
+        for old_program in stats.can_prune_gens:
+            (old_tp, old_fn, old_tn, old_fp) = old_program.conf_matrix
+            gen_size = num_pos + old_tp - new_score - size # JW: Prune all generalizations with size greater than this
+            rules.update(constrainer.generalisation_constraint_size(old_program.program, before, min_clause, gen_size))
+
+        for old_program in stats.can_prune_specs:
+            (old_tp, old_fn, old_tn, old_fp) = old_program.conf_matrix
+            spec_size = num_neg + old_tp - new_score - size # JW: Prune all specializations with size greater than this
+            rules.update(constrainer.specialisation_constraint_size(old_program.program, before, min_clause, spec_size))
+
+        if not gens_pruned_flag:
+            gen_size = num_pos - new_tp + size
+            rules.update(constrainer.generalisation_constraint_size(program, before, min_clause, gen_size))
+
+        if not specs_pruned_flag:
+            spec_size = num_neg - new_tn + size
+            rules.update(constrainer.specialisation_constraint_size(program, before, min_clause, spec_size))
 
         # JW: Minimal Constraints - Only prune generalizations when entailing all negative examples. Only prune specializations when entailing no positive examples
         # JW: Still prune generalisations when entailing all positive examples. Still prune specializations when entailing no negative examples
@@ -230,7 +249,7 @@ def popper(settings, stats):
 
             # BUILD RULES
             with stats.duration('build'):
-                rules = build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome)
+                rules = build_rules(settings, stats, constrainer, tester, program, before, min_clause, outcome, size)
 
             # GROUND RULES
             with stats.duration('ground'):
