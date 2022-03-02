@@ -200,7 +200,15 @@ class Clause:
 
         return (head, tuple(ordered_body))
 
-def is_subset(program1, program2):
+    @staticmethod
+    def is_subset(clause1, clause2):
+        (head1, body1) = clause1
+        (head2, body2) = clause2
+        if head1 == head2 and body1.issubset(body2):
+            return True
+        return False
+
+def is_program_subset(program1, program2):
     for clause1 in program1:
         for clause2 in program2:
             flag = False
@@ -212,37 +220,23 @@ def is_subset(program1, program2):
     return True
 
 def is_specialization_of(program1, program2):
-    prolog = Prolog()
     for clause1 in program1:
-        (head1, body1) = clause1
-        D = f'[{",".join([Literal.to_code(blit) for blit in body1])}]'
         flag = False
         for clause2 in program2:
-            (head2, body2) = clause2
-            if head1 == head2: # Use for predicate invention, only compare clauses with same head
-                C = f'[{",".join([Literal.to_code(blit) for blit in body2])}]'
-                res = list(prolog.query(f'subsumes({C},{D})'))
-                if len(res) > 0:
-                    flag = True
-                    break
+            if Clause.is_subset(clause2, clause1):
+                flag = True
+                break
         if not flag:
-            return False
+            return False        
     return True
 
 def is_generalization_of(program1, program2):
-    prolog = Prolog()
     for clause2 in program2:
-        (head2, body2) = clause2
-        D = f'[{",".join([Literal.to_code(blit) for blit in body2])}]'
         flag = False
         for clause1 in program1:
-            (head1, body1) = clause1
-            if head1 == head2: # Use for predicate invention, only compare clauses with same head
-                C = f'[{",".join([Literal.to_code(blit) for blit in body1])}]'
-                res = list(prolog.query(f'subsumes({C},{D})'))
-                if len(res) > 0:
-                    flag = True
-                    break
+            if Clause.is_subset(clause1, clause2):
+                flag = True
+                break
         if not flag:
             return False
     return True
