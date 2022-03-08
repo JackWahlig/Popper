@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from importlib.resources import is_resource
 import logging
 import sys
 from . util import Settings, Stats, timeout, format_program
@@ -81,7 +82,7 @@ def build_rules(settings, stats, constrainer, tester, program, before, min_claus
         for old_program in stats.all_programs[:-1]:
             (old_tp, old_fn, old_tn, old_fp) = old_program.conf_matrix
 
-            if new_tp == old_tp and len(program) > len(old_program.program) and is_generalization_of(program, old_program.program):
+            if new_tp == old_tp and len(program) >= len(old_program.program) and is_generalization_of(program, old_program.program):
                 if is_program_subset(old_program.program, program):
                     # JW: Prune GENS and SPECS of NEW program
                     rules.update(constrainer.generalisation_constraint_non_rec(program, before, min_clause))
@@ -94,7 +95,7 @@ def build_rules(settings, stats, constrainer, tester, program, before, min_claus
                     rules.update(constrainer.generalisation_constraint_non_rec(program, before, min_clause))
                     gens_pruned_flag = True
 
-            if not gens_pruned_flag and new_tn == old_tn and len(program) > len(old_program.program) and is_specialization_of(program, old_program.program):
+            if not gens_pruned_flag and new_tn == old_tn and len(program) >= len(old_program.program) and is_specialization_of(program, old_program.program):
                 # JW: Prune GENS of NEW Program
                 rules.update(constrainer.generalisation_constraint_non_rec(program, before, min_clause))
                 gens_pruned_flag = True
@@ -187,8 +188,18 @@ def build_rules(settings, stats, constrainer, tester, program, before, min_claus
         # evaluate inconsistent sub-clauses
         for rule in program:
             if Clause.is_separable(rule) and tester.is_inconsistent(rule):
-                for x in constrainer.generalisation_constraint([rule], before, min_clause):
-                    rules.add(x)
+                if settings.noisy:
+                    # JW: Relaxing constraints in noisy setting
+                    (new_tp, new_fn, new_tn, new_fp) = tester.test([rule])
+                    for old_program in stats.all_programs[:-1]:
+                        if (new_tp == old_tp and len(old_program.program) == 1 and is_generalization_of([rule], old_program.program)) \
+                            or (new_tn == old_tn and len(old_program.program) == 1 and is_specialization_of([rule], old_program.program)):
+                                for x in constrainer.generalisation_constraint([rule], before, min_clause):
+                                    rules.add(x)
+                                break
+                else:
+                    for x in constrainer.generalisation_constraint([rule], before, min_clause):
+                        rules.add(x)
 
         # eliminate totally incomplete rules
         if all(Clause.is_separable(rule) for rule in program):
